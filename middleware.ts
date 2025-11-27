@@ -14,7 +14,7 @@ export async function middleware(request: NextRequest) {
 
     try {
         // Verify the token
-        const { payload } = await jwtVerify(token, secret)
+        await jwtVerify(token, secret)
     } catch (err) {
         return NextResponse.redirect(new URL('/login', request.url))
     }
@@ -24,6 +24,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
     matcher: [
-        '/((?!api|_next|static|images|favicon.ico|manifest.json|login|register).*)',
+        // exclude public routes from auth: api, assets, login, register, set-password
+        '/((?!api|_next|static|images|favicon.ico|manifest.json|login|register|set-password).*)',
     ],
 }

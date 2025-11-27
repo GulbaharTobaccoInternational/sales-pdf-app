@@ -1,6 +1,6 @@
 'use client'
 
-import React, { Suspense } from 'react'
+import React, { Suspense, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -10,9 +10,9 @@ import { Input } from '../../../components/ui/input'
 import { Lock } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
-import { useState } from 'react'
 import api from '../../../lib/api'
 import { toast } from 'react-hot-toast'
+import axios from 'axios'
 
 const setPasswordSchema = z.object({
     password: z.string().min(6, 'Password must be at least 6 characters long'),
@@ -35,19 +35,35 @@ function SetPasswordForm() {
 
     const [loading, setLoading] = useState(false)
 
+    const tokenMissing = useMemo(() => !token, [token])
+
     const onSubmit = async (data: SetPasswordFormData) => {
         if (!token) {
-            toast.error('Invalid or expired reset link.')
+            toast.error('This link is invalid or has expired. Please request a new one.')
             return
         }
 
         setLoading(true)
         try {
-            await api.post('/api/auth/set-password', { token, password: data.password })
-            toast.success('Password set successfully!')
+            await api.post('/api/auth/set-password', {
+                token,
+                password: data.password,
+            })
+
+            toast.success('Password set successfully! You can now log in.')
             router.push('/login')
-        } catch (error) {
-            toast.error('Failed to set password. Please try again.')
+        } catch (error: unknown) {
+            let message = 'Failed to set password. Please try again.'
+
+            // Try to surface API error message coming from route.ts
+            if (axios.isAxiosError(error)) {
+                const apiError = (error.response?.data as any)?.error
+                if (apiError && typeof apiError === 'string') {
+                    message = apiError
+                }
+            }
+
+            toast.error(message)
         } finally {
             setLoading(false)
         }
@@ -82,7 +98,7 @@ function SetPasswordForm() {
             </div>
 
             {/* Right Section - Set Password Form */}
-            <div className="flex flex-col justify-center items-center h-full">
+            <div className="flex h-full flex-col items-center justify-center">
                 <Image
                     src="/images/gulbahar-logodark.svg"
                     width={145}
@@ -97,7 +113,9 @@ function SetPasswordForm() {
                             Set New Password
                         </h2>
                         <p className="font-medium leading-tight">
-                            Enter a new password to secure your account.
+                            {tokenMissing
+                                ? 'This link is invalid or has expired. Please request a new invite or reset email.'
+                                : 'Enter a new password to secure your account.'}
                         </p>
                     </CardHeader>
                     <CardContent>
@@ -113,10 +131,11 @@ function SetPasswordForm() {
                                     type="password"
                                     placeholder="********"
                                     iconRight={<Lock className="size-[18px]" />}
+                                    disabled={tokenMissing || loading}
                                     {...register('password')}
                                 />
                                 {errors.password && (
-                                    <p className="text-red-500 text-sm">
+                                    <p className="text-sm text-red-500">
                                         {errors.password.message}
                                     </p>
                                 )}
@@ -127,13 +146,9 @@ function SetPasswordForm() {
                                 variant="black"
                                 size="large"
                                 className="w-full"
-                                disabled={loading}
+                                disabled={loading || tokenMissing}
                             >
-                                {loading ? (
-                                    <span className="loader" />
-                                ) : (
-                                    'Set Password'
-                                )}
+                                {loading ? <span className="loader" /> : 'Set Password'}
                             </Button>
                         </form>
                     </CardContent>
