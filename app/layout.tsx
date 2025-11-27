@@ -4,9 +4,9 @@ import { Toaster } from 'react-hot-toast'
 import ServiceWorker from '@/components/ServiceWorker' // ✅ Import the new component
 
 export const metadata: Metadata = {
-    title: 'GTI Sales Dashboard',
+    title: 'Toolio',
     description:
-        'Gulbahar Tobacco International Sales Dashboard – Monitor sales performance, track inventory, and analyze business data in real-time. Empowering efficient decision-making for one of the leading tobacco manufacturers in the UAE.',
+        'Toolio – Monitor sales performance, track inventory, and analyze business data in real-time. Empowering efficient decision-making for one of the leading tobacco manufacturers in the UAE.',
 }
 
 export default function RootLayout({
