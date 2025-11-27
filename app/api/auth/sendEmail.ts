@@ -14,7 +14,7 @@ const resend = new Resend(resendApiKey);
 const RAW_FROM_EMAIL =
   process.env.EMAIL_FROM ||
   process.env.SENDGRID_FROM_EMAIL ||
-  'GTI Notifications <onboarding@resend.dev>';
+  'GTI Notifications <no-reply@toolio-gti.com>';
 
 // Simple validator: either "Name <email@domain.com>" or "email@domain.com"
 const FROM_REGEX =
@@ -22,7 +22,7 @@ const FROM_REGEX =
 
 const FROM_EMAIL = FROM_REGEX.test(RAW_FROM_EMAIL.trim())
   ? RAW_FROM_EMAIL.trim()
-  : 'GTI Notifications <onboarding@resend.dev>';
+  : 'GTI Notifications <no-reply@toolio-gti.com>';
 
 if (!FROM_REGEX.test(RAW_FROM_EMAIL.trim())) {
   console.warn(
