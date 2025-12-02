@@ -20,6 +20,11 @@ type User = {
     createdAt: string
 }
 
+type FormValues = {
+    email: string
+    role: string
+}
+
 const UsersPage = () => {
     const [users, setUsers] = useState<User[]>([])
     const [loading, setLoading] = useState(true)
@@ -36,12 +41,11 @@ const UsersPage = () => {
         reset,
         setValue,
         formState: { errors },
-    } = useForm()
+    } = useForm<FormValues>()
 
     useEffect(() => {
         fetchUsers()
 
-        // edit / delete events from table actions (kept as-is)
         const editHandler = (event: CustomEvent) => openEditModal(event.detail)
         const deleteHandler = (event: CustomEvent) => openDeleteDialog(event.detail)
 
@@ -67,20 +71,48 @@ const UsersPage = () => {
         }
     }
 
-    const handleAddUser = async (data: any) => {
+    // ADD or EDIT user based on selectedUser
+    const handleAddUser = async (data: FormValues) => {
         setButtonLoading(true)
         try {
-            const response = await api.post('/api/users', data)
-            if (response.status === 201) {
-                toast.success('User added successfully')
-                reset()
-                setIsDialogOpen(false)
-                fetchUsers()
+            if (selectedUser) {
+                // ✅ EDIT: call PUT /api/users/:id
+                const response = await api.put(`/api/users/${selectedUser.id}`, {
+                    email: data.email,
+                    role: data.role,
+                })
+
+                if (response.status === 200) {
+                    toast.success('User updated successfully')
+                    reset()
+                    setSelectedUser(null)
+                    setIsDialogOpen(false)
+                    fetchUsers()
+                } else {
+                    toast.error('Failed to update user')
+                }
             } else {
-                toast.error('Failed to add user')
+                // ✅ ADD: call POST /api/users
+                const response = await api.post('/api/users', data)
+
+                if (response.status === 201) {
+                    toast.success('User added successfully')
+                    reset()
+                    setIsDialogOpen(false)
+                    fetchUsers()
+                } else {
+                    toast.error('Failed to add user')
+                }
             }
-        } catch (error) {
-            toast.error('Error adding user')
+        } catch (error: any) {
+            const msg = error?.response?.data?.error
+            if (msg === 'User already exists') {
+                toast.error('User already exists')
+            } else if (selectedUser) {
+                toast.error('Error updating user')
+            } else {
+                toast.error('Error adding user')
+            }
             console.error(error)
         } finally {
             setButtonLoading(false)
@@ -89,6 +121,7 @@ const UsersPage = () => {
 
     const handleDeleteUser = async () => {
         if (!userToDelete) return
+        setButtonLoading(true)
         try {
             await api.delete(`/api/users/${userToDelete}`)
             toast.success('User deleted successfully')
@@ -98,6 +131,7 @@ const UsersPage = () => {
         } finally {
             setDeleteDialogOpen(false)
             setUserToDelete(null)
+            setButtonLoading(false)
         }
     }
 
@@ -147,7 +181,7 @@ const UsersPage = () => {
                 )}
             </div>
 
-            {/* Table in a glass card */}
+            {/* Table */}
             <div className="rounded-2xl border border-white/30 bg-white/60 p-2 shadow-sm backdrop-blur-xl md:p-4">
                 <DataTable<User>
                     columns={columns(role)}
@@ -157,10 +191,14 @@ const UsersPage = () => {
                 />
             </div>
 
-            {/* Add/Edit User Dialog (UI only improved) */}
+            {/* Add/Edit User Dialog */}
             <Dialog
                 isOpen={isDialogOpen}
-                onClose={() => setIsDialogOpen(false)}
+                onClose={() => {
+                    setIsDialogOpen(false)
+                    setSelectedUser(null)
+                    reset()
+                }}
                 title={selectedUser ? 'Edit User' : 'Add User'}
                 onSubmit={handleSubmit(handleAddUser)}
                 buttonLoading={buttonLoading}
@@ -173,8 +211,8 @@ const UsersPage = () => {
                         <Input
                             placeholder="Enter email"
                             className="rounded-xl border border-zinc-300 bg-white text-black
-             placeholder:text-black/70
-             focus:border-zinc-500 focus:ring-2 focus:ring-zinc-900/10"
+                 placeholder:text-black/70
+                 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-900/10"
                             {...register('email', { required: 'Email is required' })}
                         />
                         {errors.email && (
@@ -188,9 +226,10 @@ const UsersPage = () => {
                         </label>
                         <select
                             className="w-full rounded-xl border border-zinc-300 bg-white p-2 text-sm text-black
-             outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-900/10"
+                 outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-900/10"
                             {...register('role', { required: 'Role is required' })}
-                            defaultValue={selectedUser ? selectedUser.role : ''}>
+                            defaultValue={selectedUser ? selectedUser.role : ''}
+                        >
                             <option value="">Select Role</option>
                             <option value="ADMIN">Admin</option>
                             <option value="SALESPERSON">Salesperson</option>
