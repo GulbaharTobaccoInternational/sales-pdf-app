@@ -1,7 +1,7 @@
+// app/non-product-pages/page.tsx
 'use client'
 
-import React from 'react'
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import api from '@/lib/api'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/button'
@@ -12,13 +12,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import PageHeading from '@/components/layout/page-heading'
 import { useUserRole } from '@/hooks/useUserRole'
 
-/** ---- Types ---- */
 type UiType = 'banner_front' | 'banner_back' | 'advertisement' | 'promotion'
 type RawType = UiType | 'banner' // legacy "banner" = front
 
 type NonProductPageItem = {
     id: string
-    filePath: string
+    filePath: string | null
     title: string
     type: UiType
     createdAt: string
@@ -26,10 +25,8 @@ type NonProductPageItem = {
 
 type FilterType = 'all' | UiType
 
-/** ---- Helpers ---- */
 const normalizeType = (t: RawType): UiType => (t === 'banner' ? 'banner_front' : t)
 
-// priority: which group comes first in "All"
 const TYPE_PRIORITY: Record<UiType, number> = {
     banner_front: 1,
     banner_back: 2,
@@ -37,7 +34,6 @@ const TYPE_PRIORITY: Record<UiType, number> = {
     promotion: 4,
 }
 
-// sort helper: first by type group (above), then by createdAt DESC (latest first)
 const sortNonProductItems = (list: NonProductPageItem[]): NonProductPageItem[] => {
     return [...list].sort((a, b) => {
         const pa = TYPE_PRIORITY[a.type]
@@ -47,19 +43,11 @@ const sortNonProductItems = (list: NonProductPageItem[]): NonProductPageItem[] =
 
         const da = new Date(a.createdAt).getTime()
         const db = new Date(b.createdAt).getTime()
-        return db - da // latest first
+        return db - da
     })
 }
 
-const labelForType: Record<UiType, string> = {
-    banner_front: 'Corporate Info (Front)',
-    banner_back: 'Corporate Info (Back)',
-    advertisement: 'Advert',
-    promotion: 'Promotion',
-}
-
-// New dedicated color for Corporate Info Back
-const BACK_HEX = '#8b5cf6' // purple-500
+const BACK_HEX = '#8b5cf6'
 
 const borderClassFor = (t: UiType) => {
     switch (t) {
@@ -87,14 +75,12 @@ const dotClassFor = (t: UiType) => {
     }
 }
 
-// Inline fallbacks in case tailwind theme lacks those tokens
 const borderStyleFor = (t: UiType): React.CSSProperties | undefined =>
     t === 'banner_back' ? { borderColor: BACK_HEX } : undefined
 
 const dotStyleFor = (t: UiType): React.CSSProperties | undefined =>
     t === 'banner_back' ? { backgroundColor: BACK_HEX } : undefined
 
-/* ---------- tiny presentational helper (style only) ---------- */
 const Glass = ({
     children,
     className = '',
@@ -112,9 +98,7 @@ const Glass = ({
         {children}
     </div>
 )
-/* ------------------------------------------------------------- */
 
-/** ---- Page ---- */
 export default function NonProductPages() {
     const role = useUserRole()
 
@@ -139,10 +123,9 @@ export default function NonProductPages() {
             const res = await api.get('/api/non-product-pages')
             const rows: any[] = res.data || []
 
-            // normalize + keep createdAt
             const data: NonProductPageItem[] = rows.map((row) => ({
                 id: row.id,
-                filePath: row.filePath,
+                filePath: row.filePath ?? null,
                 title: row.title,
                 type: normalizeType(row.type as RawType),
                 createdAt: row.createdAt,
@@ -164,7 +147,6 @@ export default function NonProductPages() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    // re-filter but keep the global sort order (type group + createdAt desc)
     useEffect(() => {
         if (filter === 'all') {
             setFilteredItems(items)
@@ -197,7 +179,6 @@ export default function NonProductPages() {
                 toast.success('Item added successfully')
                 setIsDialogOpen(false)
                 setFile(null)
-                // refetch to re-apply ordering
                 fetchItems()
             } else {
                 toast.error('Failed to add item')
@@ -217,7 +198,6 @@ export default function NonProductPages() {
             const res = await api.delete(`/api/non-product-pages?id=${deleteId}`)
             if (res.status === 200) {
                 toast.success('Item deleted successfully')
-                // remove and keep ordering intact
                 setItems((prev) => prev.filter((i) => i.id !== deleteId))
             } else {
                 toast.error('Failed to delete item')
@@ -234,7 +214,6 @@ export default function NonProductPages() {
 
     return (
         <div className="relative">
-            {/* soft bg + radial glow */}
             <div className="pointer-events-none absolute inset-0 -z-10">
                 <div className="absolute inset-0 bg-gradient-to-br from-zinc-50 via-white to-zinc-100" />
                 <div className="absolute left-1/2 top-[-120px] h-[420px] w-[620px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(99,102,241,0.12),rgba(255,255,255,0)_60%)]" />
@@ -243,7 +222,6 @@ export default function NonProductPages() {
             <div className="space-y-6 p-4">
                 <PageHeading heading="Non Product Pages" />
 
-                {/* Controls */}
                 <Glass className="p-3">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                         <div className="flex flex-wrap items-center gap-4">
@@ -259,7 +237,6 @@ export default function NonProductPages() {
                                 <option value="promotion">Promotions</option>
                             </select>
 
-                            {/* Legend */}
                             <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-700">
                                 <span className="flex items-center gap-2">
                                     <span className={`h-3 w-3 rounded-full ${dotClassFor('banner_front')}`} />
@@ -295,7 +272,6 @@ export default function NonProductPages() {
                     </div>
                 </Glass>
 
-                {/* Grid */}
                 {loading ? (
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                         {Array.from({ length: 10 }).map((_, i) => (
@@ -319,6 +295,8 @@ export default function NonProductPages() {
                     <div className="mx-auto grid max-w-6xl grid-cols-1 justify-center gap-4 px-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                         {filteredItems.map((item) => {
                             const t = item.type
+                            const hasFile = !!item.filePath
+
                             return (
                                 <Glass key={item.id} className="overflow-hidden">
                                     <div
@@ -330,18 +308,25 @@ export default function NonProductPages() {
                                         ].join(' ')}
                                         style={borderStyleFor(t)}
                                     >
-                                        <embed
-                                            src={`${item.filePath}#zoom=Fit`}
-                                            type="application/pdf"
-                                            className="h-full w-full object-contain"
-                                        />
+                                        {hasFile ? (
+                                            <embed
+                                                src={`${item.filePath}#zoom=Fit`}
+                                                type="application/pdf"
+                                                className="h-full w-full object-contain"
+                                            />
+                                        ) : (
+                                            <div className="flex h-full w-full flex-col items-center justify-center bg-zinc-100 px-4 text-center text-xs text-zinc-500">
+                                                <span>PDF upload in progress or missing.</span>
+                                                <span className="mt-1 text-[10px]">
+                                                    Please refresh or re-upload if this persists.
+                                                </span>
+                                            </div>
+                                        )}
 
-                                        {/* Title */}
                                         <div className="absolute bottom-0 w-full truncate bg-white/90 px-2 py-1.5 text-center text-[13px] font-medium text-zinc-900">
                                             {item.title.split('.').slice(0, -1).join('.') || item.title}
                                         </div>
 
-                                        {/* Delete */}
                                         {role === 'ADMIN' && (
                                             <button
                                                 className="absolute right-2 top-2 rounded-full border border-white/30 bg-white/70 p-2 text-red-600 hover:bg-red-100"
@@ -355,7 +340,6 @@ export default function NonProductPages() {
                                             </button>
                                         )}
 
-                                        {/* Type dot */}
                                         <span
                                             className={[
                                                 'absolute left-2 top-2 h-2.5 w-2.5 rounded-full',
@@ -370,7 +354,6 @@ export default function NonProductPages() {
                     </div>
                 )}
 
-                {/* Add Item */}
                 <Dialog isOpen={isDialogOpen} onClose={() => setIsDialogOpen(false)} title="Add Item">
                     <div className="space-y-4 p-1">
                         <Glass className="space-y-4 p-4">
@@ -431,8 +414,11 @@ export default function NonProductPages() {
                     </div>
                 </Dialog>
 
-                {/* Delete confirm */}
-                <Dialog isOpen={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} title="Confirm Deletion">
+                <Dialog
+                    isOpen={deleteDialogOpen}
+                    onClose={() => setDeleteDialogOpen(false)}
+                    title="Confirm Deletion"
+                >
                     <div className="space-y-4 p-2">
                         <p className="text-zinc-800">Are you sure you want to delete this item?</p>
                         <div className="mt-6 flex justify-end gap-4">
