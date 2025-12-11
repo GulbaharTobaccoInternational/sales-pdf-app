@@ -7,7 +7,8 @@ import { prisma } from '@/lib/prisma'
 // AWS S3 Configuration
 const s3 = new S3Client({
     region: process.env.AWS_REGION,
-    endpoint: 'https://s3-accelerate.amazonaws.com',
+    // no accelerate endpoint – using standard regional endpoint
+    // endpoint: 'https://s3-accelerate.amazonaws.com',
     credentials: {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
@@ -38,7 +39,8 @@ const uploadToS3 = async (file: File, folder: string): Promise<string> => {
             Key: key,
             Body: nodeStream,
             ContentType: file.type,
-            ACL: 'public-read',
+            // ❌ ACL removed – bucket has Object Ownership: Bucket owner enforced
+            // ACL: 'public-read',
         },
         queueSize: 4,
         partSize: 5 * 1024 * 1024,
@@ -213,6 +215,13 @@ export async function POST(req: Request) {
         const parsedFsp = fsp === 'true'
         const parsedCapsules = parseInt(capsules || '0')
 
+        // Upload files to S3 inside the request lifecycle
+        const [imageUrl, pdfUrl] = await Promise.all([
+            uploadToS3(imageFile as File, 'products'),
+            uploadToS3(pdfFile as File, 'pdfs'),
+        ])
+
+        // Create product with final URLs
         const product = await prisma.product.create({
             data: {
                 name,
@@ -225,30 +234,13 @@ export async function POST(req: Request) {
                 fsp: parsedFsp,
                 capsules: parsedCapsules,
                 color,
-                image: '',
-                pdfUrl: '',
+                image: imageUrl,
+                pdfUrl,
                 brand: { connect: { id: brandId } },
             },
         })
 
-        const response = NextResponse.json(product, { status: 201 })
-
-            ; (async () => {
-                const [imageUrl, pdfUrl] = await Promise.all([
-                    uploadToS3(imageFile, 'products').catch(() => null),
-                    uploadToS3(pdfFile, 'pdfs').catch(() => null),
-                ])
-
-                await prisma.product.update({
-                    where: { id: product.id },
-                    data: {
-                        image: imageUrl || '',
-                        pdfUrl: pdfUrl || '',
-                    },
-                })
-            })()
-
-        return response
+        return NextResponse.json(product, { status: 201 })
     } catch (error) {
         console.error('Error creating product:', error)
         return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
@@ -270,12 +262,22 @@ export async function DELETE(req: Request) {
 
         if (product.image) {
             const imageKey = product.image.split('.com/')[1]
-            await s3.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: imageKey }))
+            await s3.send(
+                new DeleteObjectCommand({
+                    Bucket: BUCKET_NAME,
+                    Key: imageKey,
+                }),
+            )
         }
 
         if (product.pdfUrl) {
             const pdfKey = product.pdfUrl.split('.com/')[1]
-            await s3.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: pdfKey }))
+            await s3.send(
+                new DeleteObjectCommand({
+                    Bucket: BUCKET_NAME,
+                    Key: pdfKey,
+                }),
+            )
         }
 
         await prisma.product.delete({ where: { id } })
