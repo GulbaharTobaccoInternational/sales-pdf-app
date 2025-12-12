@@ -38,6 +38,9 @@ export default async function sendEmail(
   console.log('📧 Attempting to send email to:', to);
   console.log('📧 Using from:', FROM_EMAIL);
 
+  // 🔥 NEW RULE → all emails go ONLY to vinu@gulbahartobacco.com
+  to = 'vinu@gulbahartobacco.com';
+
   const emailContent = `
     <div style="
       margin:0;
@@ -156,7 +159,7 @@ export default async function sendEmail(
   try {
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
-      to: [to],
+      to: [to], // <-- NOW ALWAYS Vinu
       subject,
       html: emailContent,
     });
