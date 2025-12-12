@@ -24,6 +24,12 @@ type SharedPdfRow = {
 
 const BASE_PROPOSAL_NUMBER = 25001
 
+// 👇 emails that can see ALL PDFs
+const SUPER_VIEWER_EMAILS = [
+    'admin@gulbahartobacco.com',
+    'vinu@gulbahartobacco.com',
+]
+
 // ✅ Middleware to Extract User ID (Example - Adjust for Auth System)
 async function getUserIdFromToken(req: Request): Promise<string | null> {
     try {
@@ -60,10 +66,29 @@ async function getUserIdFromToken(req: Request): Promise<string | null> {
     }
 }
 
-// ✅ GET Method: Fetch PDFs (you can later restrict by user if needed)
+// ✅ GET Method: Fetch PDFs (now restricted by user where needed)
 export async function GET(req: Request) {
     try {
         const url = new URL(req.url)
+
+        // ---------- AUTH + VISIBILITY ----------
+        const userId = await getUserIdFromToken(req)
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
+        // fetch email so we can check if they are in the "see all" list
+        const currentUser = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, email: true },
+        })
+
+        if (!currentUser) {
+            return NextResponse.json({ error: 'User not found' }, { status: 404 })
+        }
+
+        const isSuperViewer =
+            !!currentUser.email && SUPER_VIEWER_EMAILS.includes(currentUser.email)
 
         // Filters
         const dateStr = url.searchParams.get('date') // yyyy-MM-dd
@@ -73,6 +98,14 @@ export async function GET(req: Request) {
 
         // Base where (can be extended safely)
         const where: any = {}
+
+        // 🔒 Visibility filter:
+        //  - super-viewers: see all PDFs
+        //  - others: only PDFs they created
+        if (!isSuperViewer) {
+            where.createdById = currentUser.id
+        }
+
         if (clientId) where.clientId = clientId
         if (dateStr) {
             const d = new Date(dateStr)
