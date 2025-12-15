@@ -4,6 +4,7 @@ import { jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { startOfDay, endOfDay } from 'date-fns'
+import sendEmail from '@/app/api/auth/sendEmail'
 
 type SharedPdfRow = {
     id: string
@@ -24,7 +25,7 @@ type SharedPdfRow = {
 
 const BASE_PROPOSAL_NUMBER = 25001
 
-// 👇 emails that can see ALL PDFs
+// 👇 emails that can see ALL PDFs + should always be copied on notifications
 const SUPER_VIEWER_EMAILS = [
     'admin@gulbahartobacco.com',
     'vinu@gulbahartobacco.com',
@@ -39,12 +40,8 @@ async function getUserIdFromToken(req: Request): Promise<string | null> {
             return null
         }
 
-        console.log('✅ Found token:', token)
-
         const secret = new TextEncoder().encode(process.env.JWT_SECRET)
         const { payload } = await jwtVerify(token, secret)
-
-        console.log('✅ Extracted JWT Payload:', payload)
 
         if (!payload || typeof payload !== 'object') {
             console.error('🚨 Invalid JWT payload format:', payload)
@@ -58,7 +55,6 @@ async function getUserIdFromToken(req: Request): Promise<string | null> {
             return null
         }
 
-        console.log('✅ Extracted User ID:', userId)
         return userId as string
     } catch (error) {
         console.error('🚨 Error verifying token:', error)
@@ -189,10 +185,9 @@ export async function GET(req: Request) {
     }
 }
 
-// ✅ POST Method: Create a New Shared PDF & Assign Creator & Proposal Number
+// ✅ POST Method: Create a New Shared PDF & Assign Creator & Proposal Number + EMAIL CREATOR
 export async function POST(req: Request) {
     try {
-        // expiresAt from the body is no longer used – Prisma still needs *some* value.
         let { productIds, clientId } = await req.json()
 
         const userId = await getUserIdFromToken(req)
@@ -202,18 +197,14 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        console.log('✅ Extracted User ID:', userId)
-
-        const userExists = await prisma.user.findUnique({
+        const creator = await prisma.user.findUnique({
             where: { id: userId },
+            select: { id: true, email: true },
         })
 
-        if (!userExists) {
+        if (!creator) {
             console.error('🚨 Invalid createdById, user does not exist:', userId)
-            return NextResponse.json(
-                { error: 'User does not exist' },
-                { status: 400 },
-            )
+            return NextResponse.json({ error: 'User does not exist' }, { status: 400 })
         }
 
         if (typeof productIds === 'string') {
@@ -222,10 +213,7 @@ export async function POST(req: Request) {
 
         if (!Array.isArray(productIds) || productIds.length === 0) {
             console.error('🚨 Invalid productIds format:', productIds)
-            return NextResponse.json(
-                { error: 'Invalid productIds format' },
-                { status: 400 },
-            )
+            return NextResponse.json({ error: 'Invalid productIds format' }, { status: 400 })
         }
 
         const lastWithNumber = await prisma.sharedPDF.findFirst({
@@ -251,15 +239,87 @@ export async function POST(req: Request) {
                 createdById: userId,
                 proposalNumber: nextProposalNumber,
                 ...(clientId && { clientId }),
-                // 🔹 REQUIRED: Prisma schema says expiresAt is non-nullable
-                //   We don't use it anymore, so set a dummy value (now).
+                // schema requires non-null expiresAt (not used)
                 expiresAt: new Date(),
+            },
+            select: {
+                uniqueSlug: true,
+                proposalNumber: true,
+                createdAt: true,
             },
         })
 
-        console.log('✅ Shared PDF Created Successfully:', sharedPdf)
-
+        const origin = new URL(req.url).origin
+        const shareUrl = `${origin}/shared/${sharedPdf.uniqueSlug}`
         const fileName = `GTI_PROPOSAL_${sharedPdf.proposalNumber ?? nextProposalNumber}.pdf`
+
+        // ✅ email: to creator, bcc admins
+        if (creator.email) {
+            const html = `
+        <div style="margin:0;padding:0;background-color:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111827;">
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f5f5f7;padding:32px 16px;">
+            <tr>
+              <td align="center">
+                <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:520px;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 18px 45px rgba(15,23,42,0.12);">
+                  <tr>
+                    <td align="center" style="padding:24px 24px 8px;">
+                      <div style="font-size:26px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;">Toolio</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="height:4px;background:linear-gradient(90deg,#3B06D2,#7C3AED);"></td>
+                  </tr>
+                  <tr>
+                    <td style="padding:28px 24px 8px;">
+                      <h1 style="margin:0 0 10px;font-size:20px;line-height:1.3;font-weight:600;color:#111827;">
+                        Shared PDF Created
+                      </h1>
+                      <p style="margin:0 0 14px;font-size:14px;line-height:1.6;color:#4b5563;">
+                        Proposal <strong>#${sharedPdf.proposalNumber ?? nextProposalNumber}</strong> is ready.
+                      </p>
+
+                      <div style="margin:18px 0;">
+                        <a href="${shareUrl}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:linear-gradient(90deg,#111827,#000000);color:#ffffff;font-size:13px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;text-decoration:none;">
+                          Open Shared Link
+                        </a>
+                      </div>
+
+                      <p style="margin:0 0 8px;font-size:12px;line-height:1.5;color:#6b7280;">
+                        File name: <strong>${fileName}</strong>
+                      </p>
+
+                      <p style="margin:0 0 10px;font-size:12px;line-height:1.5;color:#6b7280;">
+                        If the button doesn’t work, use this link:
+                      </p>
+                      <p style="margin:0 0 20px;font-size:12px;line-height:1.5;word-break:break-all;background-color:#f9fafb;border-radius:8px;padding:10px 12px;border:1px solid #e5e7eb;color:#111827;">
+                        <a href="${shareUrl}" style="color:#2563eb;text-decoration:none;">${shareUrl}</a>
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:20px 24px 24px;border-top:1px solid #e5e7eb;">
+                      <p style="margin:0 0 4px;font-size:12px;line-height:1.5;color:#9ca3af;">Best regards,</p>
+                      <p style="margin:0 0 2px;font-size:12px;font-weight:600;color:#4b5563;">GTI Toolio • Gulbahar Tobacco International</p>
+                      <p style="margin:0;font-size:11px;line-height:1.5;color:#9ca3af;">This is an automated message. Please do not reply directly.</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </div>
+      `
+
+            // BCC admins, but avoid duplicating if creator is admin
+            const bcc = SUPER_VIEWER_EMAILS.filter((e) => e !== creator.email)
+
+            await sendEmail({
+                to: creator.email,
+                bcc,
+                subject: `Shared PDF Created • Proposal #${sharedPdf.proposalNumber ?? nextProposalNumber}`,
+                html,
+            })
+        }
 
         return NextResponse.json({
             slug: sharedPdf.uniqueSlug,
@@ -269,9 +329,6 @@ export async function POST(req: Request) {
         })
     } catch (error) {
         console.error('🚨 Error creating shared PDF:', error)
-        return NextResponse.json(
-            { error: 'Failed to create shared PDF' },
-            { status: 500 },
-        )
+        return NextResponse.json({ error: 'Failed to create shared PDF' }, { status: 500 })
     }
 }
