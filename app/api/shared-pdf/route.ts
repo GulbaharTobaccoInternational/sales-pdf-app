@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { startOfDay, endOfDay } from 'date-fns'
 import sendEmail from '@/app/api/auth/sendEmail'
+import { buildSharePath, buildShareUrl } from '@/lib/shareUrl'
 
 type SharedPdfRow = {
     id: string
@@ -249,8 +250,7 @@ export async function POST(req: Request) {
             },
         })
 
-        const origin = new URL(req.url).origin
-        const shareUrl = `${origin}/shared/${sharedPdf.uniqueSlug}`
+        const shareUrl = buildShareUrl(sharedPdf.uniqueSlug)
         const fileName = `GTI_PROPOSAL_${sharedPdf.proposalNumber ?? nextProposalNumber}.pdf`
 
         // ✅ email: to creator, bcc admins
@@ -323,7 +323,7 @@ export async function POST(req: Request) {
 
         return NextResponse.json({
             slug: sharedPdf.uniqueSlug,
-            url: `/shared/${sharedPdf.uniqueSlug}`,
+            url: buildSharePath(sharedPdf.uniqueSlug),
             proposalNumber: sharedPdf.proposalNumber,
             fileName,
         })

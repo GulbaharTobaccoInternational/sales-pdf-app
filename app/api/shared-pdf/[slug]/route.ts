@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { nanoid } from 'nanoid';
 import { cookies } from 'next/headers'
 import { jwtVerify } from 'jose'
+import { buildSharePath } from '@/lib/shareUrl'
 
 // ✅ Extract User ID from JWT Token
 async function getUserIdFromToken(req: Request): Promise<string | null> {
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
             },
         });
 
-        return NextResponse.json({ slug: sharedPdf.uniqueSlug, url: `/shared/${sharedPdf.uniqueSlug}` });
+        return NextResponse.json({ slug: sharedPdf.uniqueSlug, url: buildSharePath(sharedPdf.uniqueSlug) });
     } catch (error) {
         console.error('Error creating shared PDF:', error);
         return NextResponse.json({ error: 'Failed to create shared PDF' }, { status: 500 });
