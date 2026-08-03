@@ -3,6 +3,7 @@ import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { Upload } from '@aws-sdk/lib-storage'
 import { Readable } from 'stream'
 import { prisma } from '@/lib/prisma'
+import { rankProductsForSearch } from '@/lib/product-search'
 
 // AWS S3 Configuration
 const s3 = new S3Client({
@@ -16,6 +17,29 @@ const s3 = new S3Client({
 })
 
 const BUCKET_NAME = process.env.AWS_BUCKET_NAME!
+
+const productListSelect = {
+    id: true,
+    name: true,
+    size: true,
+    tar: true,
+    nicotine: true,
+    co: true,
+    flavor: true,
+    packetStyle: true,
+    fsp: true,
+    capsules: true,
+    color: true,
+    brandId: true,
+    brand: {
+        select: {
+            id: true,
+            name: true,
+        },
+    },
+    createdAt: true,
+    updatedAt: true,
+} as const
 
 function readableStreamToNodeStream(stream: ReadableStream) {
     const reader = stream.getReader()
@@ -65,11 +89,9 @@ export async function GET(req: NextRequest) {
             }
         }
 
-        contains('name', 'name')
         contains('size', 'size')
         contains('packetStyle', 'packetStyle')
         contains('color', 'color')
-        contains('corners', 'corners')
 
         const brandId = sp.get('brandId')
         if (brandId) where.brandId = brandId
@@ -114,36 +136,29 @@ export async function GET(req: NextRequest) {
         const pageSize = Number.parseInt(sp.get('pageSize') || '10', 10)
         const skip = (page - 1) * pageSize
         const take = pageSize
+        const searchQuery = (sp.get('name') || sp.get('q') || sp.get('search') || '').trim()
+
+        if (searchQuery) {
+            const products = await prisma.product.findMany({
+                where,
+                select: productListSelect,
+                orderBy: { updatedAt: 'desc' },
+            })
+
+            const rankedProducts = rankProductsForSearch(products, searchQuery)
+
+            return NextResponse.json({
+                products: rankedProducts.slice(skip, skip + take),
+                total: rankedProducts.length,
+            })
+        }
 
         // run count + data query in parallel
         const [total, products] = await Promise.all([
             prisma.product.count({ where }),
             prisma.product.findMany({
                 where,
-                // light: no image/pdfUrl here, just text + brand name
-                select: {
-                    id: true,
-                    name: true,
-                    size: true,
-                    tar: true,
-                    nicotine: true,
-                    co: true,
-                    flavor: true,
-                    packetStyle: true,
-                    fsp: true,
-                    capsules: true,
-                    color: true,
-                    brandId: true,
-                    brand: {
-                        select: {
-                            id: true,
-                            name: true,
-                            // Brand has no `position` in your schema, so we don't select it
-                        },
-                    },
-                    createdAt: true,
-                    updatedAt: true,
-                },
+                select: productListSelect,
                 skip,
                 take,
                 orderBy: { updatedAt: 'desc' },

@@ -87,7 +87,7 @@ export default function ProductsFilters({
   // local copy just to satisfy TS and keep UI in sync
   const [filterState, setFilters] = useState<Record<string, string>>(filters)
 
-  // local state for "Search by name" input (desktop)
+  // local state for the keyword search input
   const [nameInput, setNameInput] = useState<string>(filters.name ?? '')
 
   const tarOptions = Array.from({ length: 12 }, (_, i) => String(i + 1))
@@ -169,23 +169,28 @@ export default function ProductsFilters({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brands, filters.brandId, initialFilters.brandId, hasAppliedInitialBrand])
 
-  // Only used for "Search by name" now
   const handleChangeText = (key: string, value: string) => {
     if (key === 'name') {
       setNameInput(value)
     }
   }
 
-  // Fire the name search only when button is clicked / Enter pressed
-  const applyNameSearch = () => {
+  const getFiltersWithKeyword = (baseFilters: Record<string, string>) => {
     const trimmed = nameInput.trim()
-    const updated = { ...filters }
+    const updated = { ...baseFilters }
 
     if (!trimmed) {
       delete updated.name
     } else {
       updated.name = trimmed
     }
+
+    return updated
+  }
+
+  // Fire the keyword search only when button is clicked / Enter pressed.
+  const applyNameSearch = () => {
+    const updated = getFiltersWithKeyword(filters)
 
     setFilters(updated)
     onFilterChange(updated)
@@ -304,7 +309,7 @@ export default function ProductsFilters({
         <div className="col-span-2 flex items-center gap-2">
           <div className="relative flex-1">
             <FloatingLabelInput
-              label="Search by product name"
+              label="Search products"
               name="searchByName"
               value={nameInput}
               onChange={(value) => handleChangeText('name', value)}
@@ -628,19 +633,24 @@ export default function ProductsFilters({
         title="Filters"
       >
         <div className="space-y-4 p-4">
-          {/* Product Name (mobile uses Select per your previous code) */}
+          {/* Product keyword */}
           <div className="space-y-1">
-            <Label>Product Name</Label>
+            <Label>Search Products</Label>
             <div className="relative">
-              <Select value={getSelectValue('name')} onValueChange={onSelect('name')}>
-                <SelectTrigger>
-                  <SelectValue placeholder={'Select Product Name'} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>All</SelectItem>
-                  {/* If you later add product name options, they go here */}
-                </SelectContent>
-              </Select>
+              <FloatingLabelInput
+                label="Search products"
+                name="mobileSearchByName"
+                value={nameInput}
+                onChange={(value) => handleChangeText('name', value)}
+                iconLeft={<Search className="h-4 w-4" />}
+                onKeyDown={(event: any) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    applyNameSearch()
+                    setIsMobileFilterOpen(false)
+                  }
+                }}
+              />
             </div>
           </div>
 
@@ -895,7 +905,9 @@ export default function ProductsFilters({
             <Button
               variant="black"
               onClick={() => {
-                onFilterChange(filterState)
+                const updated = getFiltersWithKeyword(filterState)
+                setFilters(updated)
+                onFilterChange(updated)
                 setIsMobileFilterOpen(false)
               }}
             >
