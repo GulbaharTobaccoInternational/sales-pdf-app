@@ -559,6 +559,7 @@ const Products = () => {
 
   const handleFilterChange = (newFilters: { [key: string]: string }) => {
     setFilters(newFilters)
+    setPage(1)
   }
 
   const handleEdit = (item: ITable) => {
@@ -1035,7 +1036,7 @@ const Products = () => {
           <DataTable<ITable>
             columns={_columns}
             data={tableData}
-            filterField="product"
+            filterField="name"
             loading={tableLoading}
             isRemovePagination={false}
           />

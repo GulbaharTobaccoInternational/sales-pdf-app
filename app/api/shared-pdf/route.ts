@@ -26,11 +26,14 @@ type SharedPdfRow = {
 
 const BASE_PROPOSAL_NUMBER = 25001
 
-// 👇 emails that can see ALL PDFs + should always be copied on notifications
+// Users that can see all generated PDFs.
 const SUPER_VIEWER_EMAILS = [
     'admin@gulbahartobacco.com',
     'vinu@gulbahartobacco.com',
 ]
+
+// People copied on PDF-created notifications.
+const PDF_NOTIFICATION_BCC_EMAILS = ['vinu@gulbahartobacco.com']
 
 // ✅ Middleware to Extract User ID (Example - Adjust for Auth System)
 async function getUserIdFromToken(req: Request): Promise<string | null> {
@@ -253,7 +256,7 @@ export async function POST(req: Request) {
         const shareUrl = buildShareUrl(sharedPdf.uniqueSlug)
         const fileName = `GTI_PROPOSAL_${sharedPdf.proposalNumber ?? nextProposalNumber}.pdf`
 
-        // ✅ email: to creator, bcc admins
+        // Email the creator and copy internal notification recipients.
         if (creator.email) {
             const html = `
         <div style="margin:0;padding:0;background-color:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111827;">
@@ -310,8 +313,7 @@ export async function POST(req: Request) {
         </div>
       `
 
-            // BCC admins, but avoid duplicating if creator is admin
-            const bcc = SUPER_VIEWER_EMAILS.filter((e) => e !== creator.email)
+            const bcc = PDF_NOTIFICATION_BCC_EMAILS.filter((e) => e !== creator.email)
 
             await sendEmail({
                 to: creator.email,
